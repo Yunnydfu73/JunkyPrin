@@ -1,66 +1,350 @@
-<!doctype html>
-<html>
-	<head>
-		<meta charset="utf-8" />
-		<meta
-			name="viewport"
-			content="width=device-width, initial-scale=1.0, shrink-to-fit=no"
-		/>
-		<title>Scramjet</title>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Media Player & Gaming Proxy</title>
+    <!-- Template Native Scramjet Config & Service Worker Registration -->
+    <script src="/config.js"></script>
+    <script src="/register-sw.js" defer></script>
+    <style>
+        :root {
+            --bg-base: #121212;
+            --bg-elevated: #181818;
+            --bg-highlight: #282828;
+            --spotify-green: #1DB954;
+            --spotify-green-hover: #1ed760;
+            --text-main: #FFFFFF;
+            --text-muted: #B3B3B3;
+            --danger-red: #e74c3c;
+            --border-radius: 12px;
+        }
 
-		<link rel="shortcut icon" content="favicon.webp" />
-	
-		<script src="/scram/scramjet.all.js"></script>
-		<script src="/baremux/index.js"></script>
-		
-		<link rel="stylesheet" href="index.css" />
-		<script src="register-sw.js" defer></script>
-		<script src="search.js" defer></script>
-		<script src="index.js" defer></script>
-	</head>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
 
-	<body>
-		<div title="Scramjet Logo" class="flex-center logo-wrapper header-center">
-			<img class="logo" src="sj.png" alt="Scramjet" />
-			<h1>Scramjet | MW</h1>
-		</div>
-		<div class="flex-center desc left-margin">
-			<p>
-				Scramjet is an experimental interception based web proxy designed to
-				evade internet censorship, bypass arbitrary web browser restrictions and
-				innovate web proxy technologies.
-			</p>
-		</div>
+        .app-card {
+            background-color: var(--bg-elevated);
+            width: 100%;
+            max-width: 650px;
+            padding: 30px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            transition: all 0.3s ease;
+        }
 
-		<form id="sj-form" class="flex-center">
-			<input
-				id="sj-search-engine"
-				value="https://www.google.com/search?q=%s"
-				type="hidden"
-			/>
-			<input id="sj-address" type="text" placeholder="Search the web freely" />
-		</form>
-		<div class="desc left-margin">
-			<p id="sj-error"></p>
-			<pre id="sj-error-code"></pre>
-		</div>
-		<footer>
-			<div>
-				<a
-					title="The Mercury Workshop GitHub organization"
-					href="https://github.com/MercuryWorkshop"
-					>Mercury Workshop</a
-				>
-				<a
-					title="The example demo app for Scramjet"
-					href="https://github.com/MercuryWorkshop/Scramjet-Demo"
-					>GitHub</a
-				>
-				<a title="License information" href="credits.html">Credits</a>
-			</div>
-			<div>
-				<span>Scramjet &copy; MW 2025</span>
-			</div>
-		</footer>
-	</body>
+        .page { display: flex; flex-direction: column; gap: 20px; }
+        .hidden { display: none !important; }
+
+        h1, h2 { margin: 0; text-align: center; }
+        h1 { font-size: 24px; font-weight: 800; }
+        h2 { font-size: 20px; font-weight: 700; }
+
+        .subtitle { margin: -10px 0 10px 0; font-size: 13px; color: var(--text-muted); text-align: center; }
+        .page-header { display: flex; justify-content: space-between; align-items: center; }
+
+        .btn-back {
+            background: var(--bg-highlight);
+            border: none;
+            color: var(--text-main);
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .menu-grid { display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
+
+        .menu-card {
+            background-color: var(--bg-highlight);
+            border: 2px solid #333;
+            color: var(--text-main);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s ease;
+        }
+
+        .menu-card:hover { border-color: var(--spotify-green); background-color: #303030; }
+        .menu-card h3 { margin: 0 0 6px 0; font-size: 18px; color: var(--spotify-green); }
+        .menu-card p { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+        .upload-label {
+            display: block;
+            background-color: var(--spotify-green);
+            color: #000;
+            text-align: center;
+            padding: 12px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        input[type="file"] { display: none; }
+
+        .now-playing {
+            text-align: center;
+            padding: 15px;
+            background-color: var(--bg-base);
+            border-radius: 8px;
+        }
+
+        .track-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        audio { width: 100%; height: 40px; }
+
+        .controls-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+
+        .control-btn {
+            background: var(--bg-highlight);
+            border: none;
+            color: var(--text-main);
+            padding: 10px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .control-btn:hover { background-color: #404040; }
+        .control-btn.active { background-color: var(--spotify-green); color: #000; }
+
+        .btn-danger {
+            background-color: transparent;
+            color: var(--danger-red);
+            border: 1px solid var(--danger-red);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .playlist-wrapper { background-color: var(--bg-base); border-radius: 8px; padding: 12px; }
+        .playlist { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; }
+        .playlist li {
+            padding: 10px;
+            margin-bottom: 4px;
+            border-radius: 4px;
+            cursor: grab;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background-color: var(--bg-elevated);
+        }
+        .playlist li.playing { color: var(--spotify-green); border-left: 3px solid var(--spotify-green); }
+
+        /* Web / Proxy Viewer Styles */
+        .url-bar { display: flex; gap: 10px; }
+        .url-input {
+            flex: 1;
+            background-color: var(--bg-base);
+            border: 1px solid #333;
+            color: var(--text-main);
+            padding: 12px 16px;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+        }
+        .url-input:focus { border-color: var(--spotify-green); }
+        
+        .web-frame-container {
+            position: relative;
+            width: 100%;
+            height: 420px;
+            background-color: #000000;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .web-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background-color: #ffffff;
+        }
+
+        .app-card.tab-maximized {
+            max-width: 100% !important;
+            height: 95vh;
+        }
+        .app-card.tab-maximized .web-frame-container {
+            height: 100%;
+        }
+
+        .status-badge {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-card" id="app-card">
+
+        <!-- PAGE 1: MAIN MENU -->
+        <div id="page-menu" class="page">
+            <h1>Web Player & Proxy</h1>
+            <p class="subtitle">Select a mode to begin</p>
+            
+            <div class="menu-grid">
+                <button class="menu-card" id="go-single">
+                    <h3>🎵 Single Song Page</h3>
+                    <p>Load one file, play, pause, and toggle repeat.</p>
+                </button>
+                <button class="menu-card" id="go-playlist">
+                    <h3>🎶 Playlist Page</h3>
+                    <p>Add multiple files, drag to reorder, or randomize queue.</p>
+                </button>
+                <button class="menu-card" id="go-proxy">
+                    <h3>🎮 Gaming & Web Proxy</h3>
+                    <p>Browse or stream Xbox Cloud Gaming with K&M support.</p>
+                </button>
+            </div>
+        </div>
+
+        <!-- PAGE 2: SINGLE SONG PAGE -->
+        <div id="page-single" class="page hidden">
+            <div class="page-header">
+                <button class="btn-back" onclick="navigateTo('page-menu')">← Main Menu</button>
+                <button class="btn-danger" id="single-delete">Delete File</button>
+            </div>
+            <h2>Single Song Page</h2>
+            <label class="upload-label" for="single-file-input">📂 Choose MP3 / MP4 File</label>
+            <input type="file" id="single-file-input" accept="audio/*,video/mp4">
+            <div class="now-playing"><div class="track-title" id="single-title">No track loaded</div></div>
+            <audio id="single-audio-player" controls></audio>
+            <div class="controls-row">
+                <button class="control-btn" id="single-repeat-toggle">🔁 Repeat: OFF</button>
+            </div>
+        </div>
+
+        <!-- PAGE 3: PLAYLIST PAGE -->
+        <div id="page-playlist" class="page hidden">
+            <div class="page-header">
+                <button class="btn-back" onclick="navigateTo('page-menu')">← Main Menu</button>
+                <button class="btn-danger" id="playlist-clear">Clear All</button>
+            </div>
+            <h2>Playlist Page</h2>
+            <label class="upload-label" for="playlist-file-input">➕ Add Songs to Playlist</label>
+            <input type="file" id="playlist-file-input" accept="audio/*,video/mp4" multiple>
+            <div class="now-playing"><div class="track-title" id="playlist-title">No track playing</div></div>
+            <audio id="playlist-audio-player" controls></audio>
+            <div class="controls-row">
+                <button class="control-btn" id="playlist-prev">⏮ Prev</button>
+                <button class="control-btn" id="playlist-next">⏭ Next</button>
+                <button class="control-btn" id="playlist-repeat">🔁 Repeat: OFF</button>
+                <button class="control-btn" id="playlist-randomize">🔀 Randomize Queue</button>
+            </div>
+            <div class="playlist-wrapper"><ul class="playlist" id="playlist-ui"></ul></div>
+        </div>
+
+        <!-- PAGE 4: PROXY PAGE -->
+        <div id="page-proxy" class="page hidden">
+            <div class="page-header">
+                <button class="btn-back" onclick="navigateTo('page-menu')">← Main Menu</button>
+            </div>
+            <h2>Web & Cloud Gaming Proxy</h2>
+            <div class="status-badge" id="proxy-status">Ready</div>
+            
+            <div class="url-bar">
+                <input type="url" id="proxy-url-input" class="url-input" placeholder="https://xbox.com/play">
+                <button class="control-btn active" id="proxy-go-btn">Go</button>
+            </div>
+
+            <div class="controls-row">
+                <button class="control-btn" id="btn-lock-pointer">🖱️ Lock K&M</button>
+                <button class="control-btn" id="btn-tab-maximize">📐 Expand in Tab</button>
+                <button class="control-btn" id="btn-fullscreen">🖥️ Fullscreen</button>
+            </div>
+
+            <div class="web-frame-container" id="frame-container">
+                <iframe 
+                    id="proxy-frame" 
+                    class="web-frame" 
+                    src="about:blank"
+                    allow="autoplay; camera; microphone; gamepad; pointer-lock; fullscreen; display-capture"
+                    allowfullscreen>
+                </iframe>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function navigateTo(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+            document.getElementById(pageId).classList.remove('hidden');
+        }
+        document.getElementById('go-single').addEventListener('click', () => navigateTo('page-single'));
+        document.getElementById('go-playlist').addEventListener('click', () => navigateTo('page-playlist'));
+        document.getElementById('go-proxy').addEventListener('click', () => navigateTo('page-proxy'));
+
+        const proxyUrlInput = document.getElementById('proxy-url-input');
+        const proxyFrame = document.getElementById('proxy-frame');
+        const appCard = document.getElementById('app-card');
+        const frameContainer = document.getElementById('frame-container');
+
+        function launchProxyUrl() {
+            let url = proxyUrlInput.value.trim();
+            if (!url) return;
+
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                url = 'https://' + url;
+            }
+
+            if (window.__scramjet$config) {
+                const proxyUrl = __scramjet$config.prefix + __scramjet$config.codec.encode(url);
+                proxyFrame.src = proxyUrl;
+            } else {
+                setTimeout(() => {
+                    if (window.__scramjet$config) {
+                        proxyFrame.src = __scramjet$config.prefix + __scramjet$config.codec.encode(url);
+                    }
+                }, 500);
+            }
+        }
+
+        document.getElementById('proxy-go-btn').addEventListener('click', launchProxyUrl);
+        proxyUrlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') launchProxyUrl(); });
+
+        document.getElementById('btn-fullscreen').addEventListener('click', () => {
+            if (frameContainer.requestFullscreen) frameContainer.requestFullscreen();
+        });
+
+        let isTabMaximized = false;
+        document.getElementById('btn-tab-maximize').addEventListener('click', (e) => {
+            isTabMaximized = !isTabMaximized;
+            appCard.classList.toggle('tab-maximized', isTabMaximized);
+            e.target.textContent = isTabMaximized ? '📉 Shrink in Tab' : '📐 Expand in Tab';
+        });
+
+        document.getElementById('btn-lock-pointer').addEventListener('click', () => {
+            try {
+                proxyFrame.focus();
+                proxyFrame.requestPointerLock();
+            } catch (err) {
+                console.log(err);
+            }
+        });
+    </script>
+</body>
 </html>
