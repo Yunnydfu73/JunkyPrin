@@ -3,26 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Media Player & Gaming Proxy</title>
-    <!-- Template Native Scramjet Config & Service Worker Registration -->
-    <script src="/config.js"></script>
-    <script src="/register-sw.js" defer></script>
+    <title>Spotify Web Media Player & Web Viewer Pro</title>
     <style>
         :root {
-            --bg-base: #121212;
-            --bg-elevated: #181818;
-            --bg-highlight: #282828;
+            --bg-base: #050505;
+            --bg-elevated: #121212;
+            --bg-highlight: #202020;
             --spotify-green: #1DB954;
             --spotify-green-hover: #1ed760;
+            --spotify-glow: 0 0 20px rgba(29, 185, 84, 0.5);
+            --spotify-glow-strong: 0 0 35px rgba(29, 185, 84, 0.9);
             --text-main: #FFFFFF;
             --text-muted: #B3B3B3;
-            --danger-red: #e74c3c;
-            --border-radius: 12px;
+            --danger-red: #ff4757;
+            --danger-glow: 0 0 20px rgba(255, 71, 87, 0.5);
+            --border-radius: 20px;
+            --transition-speed: 0.3s;
         }
 
+        /* --- GLOBAL & ANIMATIONS --- */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-base);
+            background-image: radial-gradient(circle at top left, #1a1a1a 0%, var(--bg-base) 100%);
             color: var(--text-main);
             display: flex;
             justify-content: center;
@@ -31,192 +34,322 @@
             margin: 0;
             padding: 20px;
             box-sizing: border-box;
+            overflow-x: hidden;
         }
 
+        .fx-enabled .glow-target { box-shadow: var(--spotify-glow) !important; }
+        .fx-enabled .glow-text { text-shadow: var(--spotify-glow) !important; }
+
+        @keyframes fadeInScale {
+            0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        
+        @keyframes eqBar {
+            0% { height: 5px; }
+            50% { height: 25px; }
+            100% { height: 5px; }
+        }
+
+        /* --- LOADING SCREEN --- */
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            background-color: var(--bg-base);
+            background-image: radial-gradient(circle at center, #111 0%, var(--bg-base) 100%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .loader-eq { display: flex; gap: 6px; margin-bottom: 20px; align-items: flex-end; height: 40px; }
+        .loader-eq div { width: 8px; background-color: var(--spotify-green); border-radius: 4px; box-shadow: var(--spotify-glow); }
+        .loader-eq div:nth-child(1) { animation: eqBar 1s infinite ease-in-out 0.1s; }
+        .loader-eq div:nth-child(2) { animation: eqBar 1s infinite ease-in-out 0.3s; }
+        .loader-eq div:nth-child(3) { animation: eqBar 1s infinite ease-in-out 0.0s; }
+        .loader-eq div:nth-child(4) { animation: eqBar 1s infinite ease-in-out 0.4s; }
+        .loader-eq div:nth-child(5) { animation: eqBar 1s infinite ease-in-out 0.2s; }
+
+        .loading-title { font-size: 24px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 5px; color: var(--text-main); text-shadow: 0 0 10px rgba(255,255,255,0.2); }
+        .tip-text { color: var(--spotify-green); font-size: 14px; font-style: italic; max-width: 320px; text-align: center; margin-top: 15px; opacity: 0.8; }
+
+        /* --- APP CONTAINER --- */
         .app-card {
             background-color: var(--bg-elevated);
             width: 100%;
-            max-width: 650px;
-            padding: 30px;
+            max-width: 600px;
+            padding: 35px;
             border-radius: var(--border-radius);
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            transition: all 0.3s ease;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            z-index: 10;
         }
 
-        .page { display: flex; flex-direction: column; gap: 20px; }
+        .page { display: flex; flex-direction: column; gap: 20px; animation: fadeInScale 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
         .hidden { display: none !important; }
 
-        h1, h2 { margin: 0; text-align: center; }
-        h1 { font-size: 24px; font-weight: 800; }
-        h2 { font-size: 20px; font-weight: 700; }
+        h1 { margin: 0; text-align: center; font-size: 28px; font-weight: 800; }
+        h2 { margin: 0; text-align: center; font-size: 24px; font-weight: 700; color: var(--spotify-green); }
+        p.subtitle { margin: -10px 0 15px 0; font-size: 14px; color: var(--text-muted); text-align: center; }
 
-        .subtitle { margin: -10px 0 10px 0; font-size: 13px; color: var(--text-muted); text-align: center; }
-        .page-header { display: flex; justify-content: space-between; align-items: center; }
+        .page-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 5px; }
 
+        /* --- BUTTONS & INPUTS --- */
+        button { font-family: inherit; outline: none; }
+        
         .btn-back {
-            background: var(--bg-highlight);
-            border: none;
+            background: transparent;
+            border: 1px solid #444;
             color: var(--text-main);
-            padding: 8px 14px;
+            padding: 8px 16px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
+            transition: all var(--transition-speed);
         }
-
-        .menu-grid { display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
-
-        .menu-card {
-            background-color: var(--bg-highlight);
-            border: 2px solid #333;
-            color: var(--text-main);
-            padding: 20px;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            text-align: left;
-            transition: all 0.2s ease;
-        }
-
-        .menu-card:hover { border-color: var(--spotify-green); background-color: #303030; }
-        .menu-card h3 { margin: 0 0 6px 0; font-size: 18px; color: var(--spotify-green); }
-        .menu-card p { margin: 0; font-size: 13px; color: var(--text-muted); }
-
-        .upload-label {
-            display: block;
-            background-color: var(--spotify-green);
-            color: #000;
-            text-align: center;
-            padding: 12px;
-            border-radius: 50px;
-            cursor: pointer;
-            font-weight: 700;
-            font-size: 14px;
-        }
-
-        input[type="file"] { display: none; }
-
-        .now-playing {
-            text-align: center;
-            padding: 15px;
-            background-color: var(--bg-base);
-            border-radius: 8px;
-        }
-
-        .track-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        audio { width: 100%; height: 40px; }
-
-        .controls-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
-
-        .control-btn {
-            background: var(--bg-highlight);
-            border: none;
-            color: var(--text-main);
-            padding: 10px 14px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-
-        .control-btn:hover { background-color: #404040; }
-        .control-btn.active { background-color: var(--spotify-green); color: #000; }
+        .btn-back:hover { background-color: var(--bg-highlight); border-color: var(--text-main); transform: translateX(-4px); }
 
         .btn-danger {
             background-color: transparent;
             color: var(--danger-red);
             border: 1px solid var(--danger-red);
-            padding: 6px 12px;
+            padding: 8px 16px;
             border-radius: 20px;
-            font-size: 11px;
-            cursor: pointer;
-        }
-
-        .playlist-wrapper { background-color: var(--bg-base); border-radius: 8px; padding: 12px; }
-        .playlist { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; }
-        .playlist li {
-            padding: 10px;
-            margin-bottom: 4px;
-            border-radius: 4px;
-            cursor: grab;
             font-size: 13px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background-color: var(--bg-elevated);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-speed);
         }
-        .playlist li.playing { color: var(--spotify-green); border-left: 3px solid var(--spotify-green); }
+        .btn-danger:hover { background-color: var(--danger-red); color: #fff; box-shadow: var(--danger-glow); transform: translateY(-2px); }
 
-        /* Web / Proxy Viewer Styles */
-        .url-bar { display: flex; gap: 10px; }
-        .url-input {
-            flex: 1;
-            background-color: var(--bg-base);
+        .upload-label {
+            display: block;
+            background: linear-gradient(135deg, var(--spotify-green), #148f3f);
+            color: #000;
+            text-align: center;
+            padding: 16px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 800;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .upload-label:hover { transform: translateY(-3px) scale(1.02); box-shadow: var(--spotify-glow-strong); }
+        .upload-label:active { transform: translateY(1px); }
+        input[type="file"] { display: none; }
+
+        .control-btn {
+            background: var(--bg-highlight);
             border: 1px solid #333;
             color: var(--text-main);
-            padding: 12px 16px;
+            padding: 10px 18px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all var(--transition-speed);
+        }
+        .control-btn:hover { background-color: #333; border-color: var(--text-muted); }
+        .control-btn.active { background-color: var(--spotify-green); color: #000; border-color: var(--spotify-green); box-shadow: var(--spotify-glow); }
+
+        /* --- MENU CARDS --- */
+        .menu-grid { display: grid; grid-template-columns: 1fr; gap: 15px; }
+        .menu-card {
+            background-color: var(--bg-highlight);
+            border: 1px solid #333;
+            padding: 22px;
+            border-radius: 16px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .menu-card::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
+            transform: skewX(-25deg); transition: 0.5s;
+        }
+        .menu-card:hover::before { left: 150%; }
+        .menu-card:hover { border-color: var(--spotify-green); background-color: #2a2a2a; transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.5), var(--spotify-glow); }
+        .menu-card h3 { margin: 0 0 8px 0; font-size: 18px; color: var(--spotify-green); display: flex; align-items: center; gap: 8px; }
+        .menu-card p { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+        /* --- MEDIA PLAYER UI --- */
+        .now-playing-container {
+            background-color: #000;
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid #222;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .track-title { font-weight: 800; font-size: 18px; margin-bottom: 5px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .track-status { font-size: 12px; color: var(--spotify-green); text-transform: uppercase; font-weight: 700; letter-spacing: 1px; margin-bottom: 15px; }
+        
+        .visualizer { display: flex; gap: 4px; justify-content: center; height: 30px; align-items: flex-end; opacity: 0; transition: opacity 0.3s; margin-bottom: 15px; }
+        .visualizer.active { opacity: 1; }
+        .visualizer div { width: 5px; background: var(--spotify-green); border-radius: 3px; }
+        .visualizer.active div:nth-child(1) { animation: eqBar 0.8s infinite ease-in-out 0.1s; }
+        .visualizer.active div:nth-child(2) { animation: eqBar 0.6s infinite ease-in-out 0.3s; }
+        .visualizer.active div:nth-child(3) { animation: eqBar 0.9s infinite ease-in-out 0.0s; }
+        .visualizer.active div:nth-child(4) { animation: eqBar 0.7s infinite ease-in-out 0.4s; }
+        .visualizer.active div:nth-child(5) { animation: eqBar 0.8s infinite ease-in-out 0.2s; }
+
+        audio { width: 100%; height: 40px; outline: none; border-radius: 8px; margin-bottom: 15px; }
+        audio::-webkit-media-controls-panel { background-color: var(--bg-highlight); }
+        audio::-webkit-media-controls-current-time-display, audio::-webkit-media-controls-time-remaining-display { color: #fff; }
+
+        .controls-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+
+        /* --- PLAYLIST UI --- */
+        .playlist-wrapper { background-color: #000; border-radius: 12px; padding: 10px; border: 1px solid #222; }
+        .playlist { list-style: none; padding: 0; margin: 0; max-height: 250px; overflow-y: auto; scroll-behavior: smooth; }
+        .playlist::-webkit-scrollbar { width: 8px; }
+        .playlist::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
+        .playlist::-webkit-scrollbar-thumb:hover { background: var(--spotify-green); }
+
+        .playlist li {
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: grab;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background-color: var(--bg-elevated);
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .playlist li:hover { background-color: var(--bg-highlight); transform: translateX(5px); border-color: #444; }
+        .playlist li.playing { border-left: 4px solid var(--spotify-green); background-color: rgba(29, 185, 84, 0.1); font-weight: 700; color: var(--spotify-green); }
+        .playlist li.dragging { opacity: 0.5; cursor: grabbing; border: 1px dashed var(--spotify-green); }
+        .playlist li.drag-over { border-top: 2px solid var(--spotify-green); padding-top: 14px; }
+        
+        .track-index { font-size: 12px; color: #666; width: 20px; text-align: center; }
+        .playlist li.playing .track-index { color: var(--spotify-green); }
+        .track-name { flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* --- WEB VIEWER UI --- */
+        .web-controls { background: var(--bg-highlight); padding: 15px; border-radius: 12px; display: flex; flex-direction: column; gap: 10px; border: 1px solid #333; }
+        .url-bar { display: flex; gap: 10px; width: 100%; }
+        
+        .url-input, .auth-input, .settings-input {
+            flex-grow: 1;
+            background-color: var(--bg-base);
+            border: 1px solid #444;
+            color: var(--text-main);
+            padding: 12px 18px;
             border-radius: 25px;
             font-size: 14px;
             outline: none;
+            transition: all 0.3s;
         }
-        .url-input:focus { border-color: var(--spotify-green); }
+        .url-input:focus, .auth-input:focus, .settings-input:focus { border-color: var(--spotify-green); box-shadow: var(--spotify-glow); background-color: #000; }
         
-        .web-frame-container {
-            position: relative;
-            width: 100%;
-            height: 420px;
-            background-color: #000000;
-            border-radius: 8px;
-            overflow: hidden;
-            transition: all 0.3s ease;
-        }
+        .web-action-row { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        
+        .web-frame { width: 100%; height: 400px; border: 1px solid #333; border-radius: 12px; background-color: #ffffff; transition: all 0.3s; }
 
-        .web-frame {
-            width: 100%;
-            height: 100%;
-            border: none;
-            background-color: #ffffff;
+        /* --- SETTINGS UI --- */
+        .setting-row { 
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;
+            background: var(--bg-highlight); padding: 20px; border-radius: 16px; margin-top: 10px; border: 1px solid #333; transition: all 0.3s;
         }
+        .setting-row:hover { border-color: #555; }
+        .setting-text { flex: 1 1 200px; }
+        .setting-text strong { font-size: 16px; color: var(--text-main); }
+        .setting-text span { color: var(--text-muted); font-size: 13px; display: block; margin-top: 4px; }
+        
+        select.settings-input { appearance: none; cursor: pointer; min-width: 150px; }
+        .full-width-setting { width: 100%; display: flex; flex-direction: column; gap: 10px; }
 
-        .app-card.tab-maximized {
-            max-width: 100% !important;
-            height: 95vh;
-        }
-        .app-card.tab-maximized .web-frame-container {
-            height: 100%;
-        }
+        /* Toggle Switch */
+        .switch { position: relative; display: inline-block; width: 54px; height: 28px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #444; transition: .4s; border-radius: 34px; border: 2px solid #333; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 50%; }
+        input:checked + .slider { background-color: var(--spotify-green); border-color: var(--spotify-green); box-shadow: var(--spotify-glow); }
+        input:checked + .slider:before { transform: translateX(26px); }
 
-        .status-badge {
-            font-size: 12px;
-            color: var(--text-muted);
-            text-align: center;
-        }
+        /* --- AUTH UI --- */
+        .auth-form { display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
+        .auth-toggle { text-align: center; font-size: 14px; color: var(--text-muted); cursor: pointer; margin-top: 15px; transition: color 0.3s; padding: 10px; }
+        .auth-toggle:hover { color: var(--spotify-green); text-shadow: 0 0 10px rgba(29, 185, 84, 0.3); }
+        
+        .user-badge { background: rgba(29, 185, 84, 0.15); border: 1px solid var(--spotify-green); color: var(--spotify-green); padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 5px; box-shadow: 0 0 10px rgba(29,185,84,0.1); }
     </style>
 </head>
-<body>
+<body class="fx-enabled">
 
-    <div class="app-card" id="app-card">
+    <!-- OVERLAY LOADING SCREEN -->
+    <div id="loading-screen">
+        <div class="loader-eq">
+            <div></div><div></div><div></div><div></div><div></div>
+        </div>
+        <div class="loading-title">System Boot</div>
+        <div class="tip-text" id="tip-display">Initializing secure modules...</div>
+    </div>
+
+    <!-- MAIN APP WRAPPER -->
+    <div class="app-card glow-target" id="main-app">
+
+        <!-- PAGE 0: AUTHENTICATION -->
+        <div id="page-auth" class="page">
+            <h1 id="auth-title" class="glow-text">Secure Login</h1>
+            <p class="subtitle" id="auth-subtitle">Access your cloud-synced playlists & settings</p>
+
+            <form class="auth-form" id="auth-form">
+                <input type="text" id="auth-username" class="auth-input glow-target" placeholder="Username" required>
+                <input type="password" id="auth-password" class="auth-input glow-target" placeholder="Password" required>
+                <button type="submit" class="upload-label" id="auth-submit-btn">Authorize Access</button>
+            </form>
+
+            <div class="auth-toggle" id="auth-mode-toggle">New user? <strong>Create an Account</strong></div>
+        </div>
 
         <!-- PAGE 1: MAIN MENU -->
-        <div id="page-menu" class="page">
-            <h1>Web Player & Proxy</h1>
-            <p class="subtitle">Select a mode to begin</p>
+        <div id="page-menu" class="page hidden">
+            <div class="page-header">
+                <div class="user-badge" id="user-display">👤 Guest</div>
+                <button class="btn-danger" onclick="logout()">Sign Out</button>
+            </div>
+            
+            <h1 class="glow-text">Dashboard</h1>
+            <p class="subtitle">Select a module to launch</p>
             
             <div class="menu-grid">
                 <button class="menu-card" id="go-single">
-                    <h3>🎵 Single Song Page</h3>
-                    <p>Load one file, play, pause, and toggle repeat.</p>
+                    <h3>🎵 Quick Player</h3>
+                    <p>Load a single media file with repeat controls and visualizer.</p>
                 </button>
                 <button class="menu-card" id="go-playlist">
-                    <h3>🎶 Playlist Page</h3>
-                    <p>Add multiple files, drag to reorder, or randomize queue.</p>
+                    <h3>🎶 Queue Manager</h3>
+                    <p>Build a playlist, drag-and-drop to reorder, and shuffle tracks.</p>
                 </button>
-                <button class="menu-card" id="go-proxy">
-                    <h3>🎮 Gaming & Web Proxy</h3>
-                    <p>Browse or stream Xbox Cloud Gaming with K&M support.</p>
+                <button class="menu-card" id="go-web">
+                    <h3>🌐 Stealth Browser</h3>
+                    <p>Access external domains securely via our unblock proxy iframe.</p>
+                </button>
+                <button class="menu-card" id="go-settings">
+                    <h3>⚙️ Preferences</h3>
+                    <p>Configure Wisp server settings, proxy routing, and visuals.</p>
                 </button>
             </div>
         </div>
@@ -224,125 +357,543 @@
         <!-- PAGE 2: SINGLE SONG PAGE -->
         <div id="page-single" class="page hidden">
             <div class="page-header">
-                <button class="btn-back" onclick="navigateTo('page-menu')">← Main Menu</button>
-                <button class="btn-danger" id="single-delete">Delete File</button>
+                <button class="btn-back" onclick="navigateTo('page-menu')">← Dashboard</button>
+                <button class="btn-danger" id="single-delete">Eject Track</button>
             </div>
-            <h2>Single Song Page</h2>
-            <label class="upload-label" for="single-file-input">📂 Choose MP3 / MP4 File</label>
+
+            <h2 class="glow-text">Quick Player</h2>
+
+            <label class="upload-label" for="single-file-input">📂 Select Media File</label>
             <input type="file" id="single-file-input" accept="audio/*,video/mp4">
-            <div class="now-playing"><div class="track-title" id="single-title">No track loaded</div></div>
-            <audio id="single-audio-player" controls></audio>
-            <div class="controls-row">
-                <button class="control-btn" id="single-repeat-toggle">🔁 Repeat: OFF</button>
+
+            <div class="now-playing-container glow-target">
+                <div class="track-status" id="single-status">Awaiting Media...</div>
+                <div class="visualizer" id="single-visualizer">
+                    <div></div><div></div><div></div><div></div><div></div>
+                </div>
+                <div class="track-title" id="single-title">-- No file loaded --</div>
+                <audio id="single-audio-player" controls></audio>
+                
+                <div class="controls-row" style="margin-top: 10px;">
+                    <button class="control-btn" id="single-repeat-toggle">🔁 Auto-Repeat: OFF</button>
+                </div>
             </div>
         </div>
 
         <!-- PAGE 3: PLAYLIST PAGE -->
         <div id="page-playlist" class="page hidden">
             <div class="page-header">
-                <button class="btn-back" onclick="navigateTo('page-menu')">← Main Menu</button>
-                <button class="btn-danger" id="playlist-clear">Clear All</button>
+                <button class="btn-back" onclick="navigateTo('page-menu')">← Dashboard</button>
+                <button class="btn-danger" id="playlist-clear">Clear Queue</button>
             </div>
-            <h2>Playlist Page</h2>
-            <label class="upload-label" for="playlist-file-input">➕ Add Songs to Playlist</label>
+
+            <h2 class="glow-text">Queue Manager</h2>
+
+            <label class="upload-label" for="playlist-file-input">➕ Add to Queue</label>
             <input type="file" id="playlist-file-input" accept="audio/*,video/mp4" multiple>
-            <div class="now-playing"><div class="track-title" id="playlist-title">No track playing</div></div>
-            <audio id="playlist-audio-player" controls></audio>
-            <div class="controls-row">
-                <button class="control-btn" id="playlist-prev">⏮ Prev</button>
-                <button class="control-btn" id="playlist-next">⏭ Next</button>
-                <button class="control-btn" id="playlist-repeat">🔁 Repeat: OFF</button>
-                <button class="control-btn" id="playlist-randomize">🔀 Randomize Queue</button>
+
+            <div class="now-playing-container glow-target">
+                <div class="track-status" id="playlist-status">Standing By</div>
+                <div class="visualizer" id="playlist-visualizer">
+                    <div></div><div></div><div></div><div></div><div></div>
+                </div>
+                <div class="track-title" id="playlist-title">-- Queue Empty --</div>
+                <audio id="playlist-audio-player" controls></audio>
+                
+                <div class="controls-row" style="margin-top: 10px;">
+                    <button class="control-btn" id="playlist-prev">⏮ Prev</button>
+                    <button class="control-btn" id="playlist-next">⏭ Next</button>
+                    <button class="control-btn" id="playlist-repeat">🔁 Mode: LINEAR</button>
+                    <button class="control-btn" id="playlist-randomize">🔀 Shuffle</button>
+                </div>
             </div>
-            <div class="playlist-wrapper"><ul class="playlist" id="playlist-ui"></ul></div>
+
+            <div class="playlist-wrapper">
+                <ul class="playlist" id="playlist-ui"></ul>
+            </div>
         </div>
 
-        <!-- PAGE 4: PROXY PAGE -->
-        <div id="page-proxy" class="page hidden">
+        <!-- PAGE 4: WEB VIEWER PAGE -->
+        <div id="page-web" class="page hidden">
             <div class="page-header">
-                <button class="btn-back" onclick="navigateTo('page-menu')">← Main Menu</button>
-            </div>
-            <h2>Web & Cloud Gaming Proxy</h2>
-            <div class="status-badge" id="proxy-status">Ready</div>
-            
-            <div class="url-bar">
-                <input type="url" id="proxy-url-input" class="url-input" placeholder="https://xbox.com/play">
-                <button class="control-btn active" id="proxy-go-btn">Go</button>
+                <button class="btn-back" onclick="navigateTo('page-menu')">← Dashboard</button>
+                <button class="btn-danger" id="clear-url-btn">✖ Clear Frame</button>
             </div>
 
-            <div class="controls-row">
-                <button class="control-btn" id="btn-lock-pointer">🖱️ Lock K&M</button>
-                <button class="control-btn" id="btn-tab-maximize">📐 Expand in Tab</button>
-                <button class="control-btn" id="btn-fullscreen">🖥️ Fullscreen</button>
+            <h2 class="glow-text">Stealth Browser</h2>
+
+            <div class="web-controls glow-target">
+                <div class="url-bar">
+                    <input type="url" id="web-url-input" class="url-input" placeholder="Enter URL (e.g., xbox.com)">
+                    <button class="control-btn active" id="load-url-btn">Launch</button>
+                </div>
+                <div class="web-action-row">
+                    <button class="control-btn" id="unblock-btn" title="Force traffic through secure proxy">🔓 Deep Proxy</button>
+                    <button class="control-btn" id="refresh-btn">🔄 Refresh</button>
+                    <button class="control-btn" id="fullscreen-btn">⛶ Full</button>
+                    <button class="control-btn" id="popout-btn" style="border-color: var(--spotify-green); color: var(--spotify-green);">↗️ Pop-out</button>
+                </div>
             </div>
 
-            <div class="web-frame-container" id="frame-container">
-                <iframe 
-                    id="proxy-frame" 
-                    class="web-frame" 
-                    src="about:blank"
-                    allow="autoplay; camera; microphone; gamepad; pointer-lock; fullscreen; display-capture"
-                    allowfullscreen>
-                </iframe>
+            <iframe id="web-frame" class="web-frame glow-target" src="about:blank" allowfullscreen></iframe>
+        </div>
+
+        <!-- PAGE 5: SETTINGS PAGE -->
+        <div id="page-settings" class="page hidden">
+            <div class="page-header">
+                <button class="btn-back" onclick="navigateTo('page-menu')">← Dashboard</button>
+                <button class="btn-danger" id="save-settings-btn" style="border-color: var(--spotify-green); color: var(--spotify-green);">Save Config</button>
+            </div>
+
+            <h2 class="glow-text">Preferences</h2>
+
+            <div class="setting-row">
+                <div class="setting-text">
+                    <strong>Auto-Proxy Web Routing</strong>
+                    <span>Automatically force standard URLs through your configured proxy engine.</span>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="auto-unblock-toggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-text">
+                    <strong>Proxy Engine Selection</strong>
+                    <span>Select how the Stealth Browser rewrites sites to bypass iframe blocks.</span>
+                </div>
+                <select id="proxy-engine-select" class="settings-input">
+                    <option value="google">Google Translate (Deep Rewrite)</option>
+                    <option value="wisp">Ultraviolet / Wisp Frontend (Advanced)</option>
+                    <option value="codetabs">CodeTabs (Basic HTML only)</option>
+                </select>
+            </div>
+
+            <div class="setting-row" id="wisp-config-row" style="display: none;">
+                <div class="setting-text full-width-setting">
+                    <strong>Wisp Proxy Frontend URL</strong>
+                    <span>Enter your hosted Ultraviolet proxy link. (Example: <i>https://your-proxy.com/uv/service/</i>). The app will automatically XOR-encode URLs for UV compatability.</span>
+                    <input type="url" id="wisp-url-input" class="settings-input" placeholder="https://example.com/uv/service/">
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-text">
+                    <strong>Neon UI Effects</strong>
+                    <span>Enable glows, shadows, and enhanced CSS animations. (Disable for performance).</span>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="ui-fx-toggle" checked>
+                    <span class="slider"></span>
+                </label>
             </div>
         </div>
 
     </div>
 
     <script>
+        // --- CORE STATE ---
+        let currentUser = null;
+
+        // --- UI EFFECTS / SETTINGS INIT ---
+        const bodyEl = document.body;
+        const uiFxToggle = document.getElementById('ui-fx-toggle');
+        const autoUnblockToggle = document.getElementById('auto-unblock-toggle');
+        const proxyEngineSelect = document.getElementById('proxy-engine-select');
+        const wispConfigRow = document.getElementById('wisp-config-row');
+        const wispUrlInput = document.getElementById('wisp-url-input');
+        const saveSettingsBtn = document.getElementById('save-settings-btn');
+
+        // Load saved preferences
+        let fxEnabled = localStorage.getItem('fxEnabled') !== 'false';
+        let autoUnblock = localStorage.getItem('autoUnblock') === 'true';
+        let proxyEngine = localStorage.getItem('proxyEngine') || 'google';
+        let wispServerUrl = localStorage.getItem('wispServerUrl') || '';
+
+        // Apply preferences to UI
+        uiFxToggle.checked = fxEnabled;
+        autoUnblockToggle.checked = autoUnblock;
+        proxyEngineSelect.value = proxyEngine;
+        wispUrlInput.value = wispServerUrl;
+        
+        if (!fxEnabled) bodyEl.classList.remove('fx-enabled');
+        if (proxyEngine === 'wisp') wispConfigRow.style.display = 'flex';
+
+        // Listen for setting changes
+        proxyEngineSelect.addEventListener('change', (e) => {
+            wispConfigRow.style.display = e.target.value === 'wisp' ? 'flex' : 'none';
+        });
+
+        saveSettingsBtn.addEventListener('click', () => {
+            fxEnabled = uiFxToggle.checked;
+            autoUnblock = autoUnblockToggle.checked;
+            proxyEngine = proxyEngineSelect.value;
+            wispServerUrl = wispUrlInput.value.trim();
+
+            localStorage.setItem('fxEnabled', fxEnabled);
+            localStorage.setItem('autoUnblock', autoUnblock);
+            localStorage.setItem('proxyEngine', proxyEngine);
+            localStorage.setItem('wispServerUrl', wispServerUrl);
+
+            if (fxEnabled) bodyEl.classList.add('fx-enabled');
+            else bodyEl.classList.remove('fx-enabled');
+            
+            saveSettingsBtn.textContent = "Saved!";
+            setTimeout(() => saveSettingsBtn.textContent = "Save Config", 1500);
+        });
+
+        // --- AUTHENTICATION LOGIC ---
+        let isSignUpMode = false;
+        const authForm = document.getElementById('auth-form');
+        const authTitle = document.getElementById('auth-title');
+        const authSubtitle = document.getElementById('auth-subtitle');
+        const authSubmitBtn = document.getElementById('auth-submit-btn');
+        const authModeToggle = document.getElementById('auth-mode-toggle');
+
+        authModeToggle.addEventListener('click', () => {
+            isSignUpMode = !isSignUpMode;
+            authTitle.textContent = isSignUpMode ? "Register Node" : "Secure Login";
+            authSubtitle.textContent = isSignUpMode ? "Establish a new profile for cloud syncing" : "Access your cloud-synced playlists & settings";
+            authSubmitBtn.textContent = isSignUpMode ? "Register" : "Authorize Access";
+            authModeToggle.innerHTML = isSignUpMode ? "Already registered? <strong>Login Here</strong>" : "New user? <strong>Create an Account</strong>";
+        });
+
+        authForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = document.getElementById('auth-username').value.trim();
+            if (!username) return;
+
+            currentUser = username;
+            document.getElementById('user-display').innerHTML = `👤 ${currentUser}`;
+            navigateTo('page-menu');
+        });
+
+        function logout() {
+            currentUser = null;
+            document.getElementById('auth-username').value = '';
+            document.getElementById('auth-password').value = '';
+            navigateTo('page-auth');
+        }
+
+        // --- TIPS & LOADING SCREEN ---
+        const tips = [
+            "Tip: Set a Wisp/Ultraviolet proxy in settings for hardcore unblocking.",
+            "Tip: Use the Pop-out button if a site refuses to run inside an iframe.",
+            "Tip: Drag tracks in the Queue Manager to arrange them.",
+            "System: Initializing audio visualizer drivers...",
+            "System: Establishing connection to Proxy Network..."
+        ];
+        
+        document.getElementById('tip-display').textContent = tips[Math.floor(Math.random() * tips.length)];
+
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const loader = document.getElementById('loading-screen');
+                loader.style.opacity = '0';
+                setTimeout(() => {
+                    loader.remove();
+                    navigateTo('page-auth');
+                }, 800); 
+            }, 2000); 
+        });
+
+        // --- NAVIGATION ---
         function navigateTo(pageId) {
-            document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+            document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
             document.getElementById(pageId).classList.remove('hidden');
         }
+
         document.getElementById('go-single').addEventListener('click', () => navigateTo('page-single'));
         document.getElementById('go-playlist').addEventListener('click', () => navigateTo('page-playlist'));
-        document.getElementById('go-proxy').addEventListener('click', () => navigateTo('page-proxy'));
+        document.getElementById('go-web').addEventListener('click', () => navigateTo('page-web'));
+        document.getElementById('go-settings').addEventListener('click', () => navigateTo('page-settings'));
 
-        const proxyUrlInput = document.getElementById('proxy-url-input');
-        const proxyFrame = document.getElementById('proxy-frame');
-        const appCard = document.getElementById('app-card');
-        const frameContainer = document.getElementById('frame-container');
+        // --- SINGLE AUDIO PLAYER ---
+        const singleInput = document.getElementById('single-file-input');
+        const singleAudio = document.getElementById('single-audio-player');
+        const singleTitle = document.getElementById('single-title');
+        const singleStatus = document.getElementById('single-status');
+        const singleVisualizer = document.getElementById('single-visualizer');
+        const singleRepeatBtn = document.getElementById('single-repeat-toggle');
+        let singleRepeatState = false;
 
-        function launchProxyUrl() {
-            let url = proxyUrlInput.value.trim();
-            if (!url) return;
+        singleInput.addEventListener('change', (e) => {
+            if (e.target.files.length === 0) return;
+            const file = e.target.files[0];
+            singleTitle.textContent = file.name.replace(/\.[^/.]+$/, "");
+            singleAudio.src = URL.createObjectURL(file);
+            singleAudio.play();
+        });
 
-            if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                url = 'https://' + url;
+        singleAudio.addEventListener('play', () => {
+            singleStatus.textContent = '▶ Now Playing';
+            singleVisualizer.classList.add('active');
+        });
+        
+        singleAudio.addEventListener('pause', () => {
+            singleStatus.textContent = '⏸ Paused';
+            singleVisualizer.classList.remove('active');
+        });
+
+        singleRepeatBtn.addEventListener('click', () => {
+            singleRepeatState = !singleRepeatState;
+            singleAudio.loop = singleRepeatState;
+            singleRepeatBtn.textContent = singleRepeatState ? '🔁 Auto-Repeat: ON' : '🔁 Auto-Repeat: OFF';
+            singleRepeatBtn.classList.toggle('active', singleRepeatState);
+        });
+
+        document.getElementById('single-delete').addEventListener('click', () => {
+            singleAudio.pause();
+            singleAudio.src = '';
+            singleTitle.textContent = '-- No file loaded --';
+            singleStatus.textContent = 'Awaiting Media...';
+            singleVisualizer.classList.remove('active');
+        });
+
+        // --- QUEUE MANAGER (PLAYLIST) ---
+        const playlistInput = document.getElementById('playlist-file-input');
+        const playlistAudio = document.getElementById('playlist-audio-player');
+        const playlistTitle = document.getElementById('playlist-title');
+        const playlistStatus = document.getElementById('playlist-status');
+        const playlistVisualizer = document.getElementById('playlist-visualizer');
+        const playlistUI = document.getElementById('playlist-ui');
+        const playlistRepeatBtn = document.getElementById('playlist-repeat');
+        const randomizeBtn = document.getElementById('playlist-randomize');
+
+        let playlist = []; 
+        let currentPlaylistIndex = -1;
+        let playlistRepeatState = 0; 
+        const playlistRepeatLabels = ['🔁 Mode: LINEAR', '🔁 Mode: LOOP ALL', '🔂 Mode: LOOP ONE'];
+
+        playlistInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            files.forEach(file => {
+                playlist.push({
+                    name: file.name.replace(/\.[^/.]+$/, ""),
+                    file: file
+                });
+            });
+
+            renderPlaylistUI();
+            if (currentPlaylistIndex === -1 && playlist.length > 0) {
+                playPlaylistTrack(0);
             }
+            playlistInput.value = '';
+        });
 
-            if (window.__scramjet$config) {
-                const proxyUrl = __scramjet$config.prefix + __scramjet$config.codec.encode(url);
-                proxyFrame.src = proxyUrl;
+        function playPlaylistTrack(index) {
+            if (index < 0 || index >= playlist.length) return;
+            currentPlaylistIndex = index;
+
+            playlistTitle.textContent = playlist[index].name;
+            playlistAudio.src = URL.createObjectURL(playlist[index].file);
+            playlistAudio.play();
+            renderPlaylistUI();
+        }
+
+        playlistAudio.addEventListener('play', () => {
+            playlistStatus.textContent = `▶ Track ${currentPlaylistIndex + 1} of ${playlist.length}`;
+            playlistVisualizer.classList.add('active');
+        });
+        
+        playlistAudio.addEventListener('pause', () => {
+            playlistStatus.textContent = '⏸ Paused';
+            playlistVisualizer.classList.remove('active');
+        });
+
+        playlistAudio.addEventListener('ended', () => {
+            if (playlistRepeatState === 2) {
+                playPlaylistTrack(currentPlaylistIndex);
+            } else if (currentPlaylistIndex < playlist.length - 1) {
+                playPlaylistTrack(currentPlaylistIndex + 1);
+            } else if (playlistRepeatState === 1 && playlist.length > 0) {
+                playPlaylistTrack(0);
             } else {
-                setTimeout(() => {
-                    if (window.__scramjet$config) {
-                        proxyFrame.src = __scramjet$config.prefix + __scramjet$config.codec.encode(url);
-                    }
-                }, 500);
+                playlistStatus.textContent = '⏹ Finished';
+                playlistVisualizer.classList.remove('active');
+            }
+        });
+
+        document.getElementById('playlist-next').addEventListener('click', () => {
+            if (playlist.length === 0) return;
+            let next = currentPlaylistIndex + 1;
+            if (next >= playlist.length) next = 0;
+            playPlaylistTrack(next);
+        });
+
+        document.getElementById('playlist-prev').addEventListener('click', () => {
+            if (playlist.length === 0) return;
+            if (playlistAudio.currentTime > 3) {
+                playlistAudio.currentTime = 0;
+                return;
+            }
+            let prev = currentPlaylistIndex - 1;
+            if (prev < 0) prev = playlist.length - 1;
+            playPlaylistTrack(prev);
+        });
+
+        playlistRepeatBtn.addEventListener('click', () => {
+            playlistRepeatState = (playlistRepeatState + 1) % 3;
+            playlistRepeatBtn.textContent = playlistRepeatLabels[playlistRepeatState];
+            playlistRepeatBtn.classList.toggle('active', playlistRepeatState > 0);
+        });
+
+        randomizeBtn.addEventListener('click', () => {
+            if (playlist.length <= 1) return;
+            randomizeBtn.classList.add('active');
+            setTimeout(() => randomizeBtn.classList.remove('active'), 300);
+
+            const activeTrack = playlist[currentPlaylistIndex];
+            for (let i = playlist.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [playlist[i], playlist[j]] = [playlist[j], playlist[i]];
+            }
+            if (activeTrack) {
+                currentPlaylistIndex = playlist.findIndex(item => item === activeTrack);
+            }
+            renderPlaylistUI();
+        });
+
+        document.getElementById('playlist-clear').addEventListener('click', () => {
+            playlist = [];
+            currentPlaylistIndex = -1;
+            playlistAudio.pause();
+            playlistAudio.src = '';
+            playlistTitle.textContent = '-- Queue Empty --';
+            playlistStatus.textContent = 'Standing By';
+            playlistVisualizer.classList.remove('active');
+            renderPlaylistUI();
+        });
+
+        let draggedIndex = null;
+        function renderPlaylistUI() {
+            playlistUI.innerHTML = '';
+            playlist.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.draggable = true;
+                if (index === currentPlaylistIndex) li.classList.add('playing');
+
+                li.innerHTML = `<span class="track-index">${index + 1}</span><span class="track-name">${item.name}</span>`;
+
+                li.addEventListener('click', () => playPlaylistTrack(index));
+                li.addEventListener('dragstart', () => { draggedIndex = index; li.classList.add('dragging'); });
+                li.addEventListener('dragend', () => { li.classList.remove('dragging'); document.querySelectorAll('.playlist li').forEach(el => el.classList.remove('drag-over')); });
+                li.addEventListener('dragover', (e) => { e.preventDefault(); li.classList.add('drag-over'); });
+                li.addEventListener('dragleave', () => { li.classList.remove('drag-over'); });
+                li.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    if (draggedIndex === index || draggedIndex === null) return;
+                    const draggedItem = playlist.splice(draggedIndex, 1)[0];
+                    playlist.splice(index, 0, draggedItem);
+                    
+                    if (currentPlaylistIndex === draggedIndex) { currentPlaylistIndex = index; } 
+                    else if (draggedIndex < currentPlaylistIndex && index >= currentPlaylistIndex) { currentPlaylistIndex--; } 
+                    else if (draggedIndex > currentPlaylistIndex && index <= currentPlaylistIndex) { currentPlaylistIndex++; }
+                    renderPlaylistUI();
+                });
+                playlistUI.appendChild(li);
+            });
+        }
+
+        // --- EMBEDDED WEB VIEWER (WITH WISP/ADVANCED PROXY FIXES) ---
+        const urlInput = document.getElementById('web-url-input');
+        const loadUrlBtn = document.getElementById('load-url-btn');
+        const unblockBtn = document.getElementById('unblock-btn');
+        const refreshBtn = document.getElementById('refresh-btn');
+        const clearUrlBtn = document.getElementById('clear-url-btn');
+        const popoutBtn = document.getElementById('popout-btn');
+        const webFrame = document.getElementById('web-frame');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+        function formatUrl(url) {
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                return 'https://' + url;
+            }
+            return url;
+        }
+
+        // Ultraviolet (UV) standard XOR encoder for Wisp compatability
+        function xorEncode(str) {
+            if (!str) return str;
+            return encodeURIComponent(
+                str.toString().split('').map((char, ind) => ind % 2 ? String.fromCharCode(char.charCodeAt() ^ 2) : char).join('')
+            );
+        }
+
+        function loadWebSite() {
+            let url = urlInput.value.trim();
+            if (!url) return;
+            url = formatUrl(url);
+            urlInput.value = url;
+            
+            if (autoUnblock) {
+                forceUnblockSite();
+            } else {
+                webFrame.src = url;
             }
         }
 
-        document.getElementById('proxy-go-btn').addEventListener('click', launchProxyUrl);
-        proxyUrlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') launchProxyUrl(); });
+        function forceUnblockSite() {
+            let url = urlInput.value.trim();
+            if (!url) return;
+            url = formatUrl(url);
+            urlInput.value = url;
+            
+            // Execute proxy logic based on Settings choice
+            if (proxyEngine === 'google') {
+                // Highly reliable fallback for reading/viewing complex DOMs (like Xbox)
+                webFrame.src = 'https://translate.google.com/translate?sl=auto&tl=en&hl=en&u=' + encodeURIComponent(url);
+                
+            } else if (proxyEngine === 'wisp') {
+                // Uses your configured Ultraviolet / Bare proxy server
+                if (!wispServerUrl) {
+                    alert("Please configure a Wisp / UV Proxy Server URL in Settings first!");
+                    return;
+                }
+                // Many UV instances expect XOR encoded parameters for the path
+                webFrame.src = wispServerUrl + xorEncode(url);
+                
+            } else if (proxyEngine === 'codetabs') {
+                // Basic iframe proxy, bad for complex scripts, good for simple static HTML
+                webFrame.src = 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url);
+            }
+        }
 
-        document.getElementById('btn-fullscreen').addEventListener('click', () => {
-            if (frameContainer.requestFullscreen) frameContainer.requestFullscreen();
+        loadUrlBtn.addEventListener('click', loadWebSite);
+        unblockBtn.addEventListener('click', forceUnblockSite);
+        urlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') loadWebSite(); });
+
+        refreshBtn.addEventListener('click', () => {
+            const currentSrc = webFrame.src;
+            if (currentSrc && currentSrc !== 'about:blank') {
+                webFrame.src = currentSrc; 
+            } else {
+                loadWebSite();
+            }
         });
 
-        let isTabMaximized = false;
-        document.getElementById('btn-tab-maximize').addEventListener('click', (e) => {
-            isTabMaximized = !isTabMaximized;
-            appCard.classList.toggle('tab-maximized', isTabMaximized);
-            e.target.textContent = isTabMaximized ? '📉 Shrink in Tab' : '📐 Expand in Tab';
+        clearUrlBtn.addEventListener('click', () => {
+            webFrame.src = 'about:blank';
+            urlInput.value = '';
         });
 
-        document.getElementById('btn-lock-pointer').addEventListener('click', () => {
-            try {
-                proxyFrame.focus();
-                proxyFrame.requestPointerLock();
-            } catch (err) {
-                console.log(err);
+        popoutBtn.addEventListener('click', () => {
+            let url = urlInput.value.trim();
+            if (url) {
+                window.open(formatUrl(url), '_blank');
+            }
+        });
+
+        fullscreenBtn.addEventListener('click', () => {
+            if (webFrame.requestFullscreen) {
+                webFrame.requestFullscreen();
+            } else if (webFrame.webkitRequestFullscreen) {
+                webFrame.webkitRequestFullscreen();
+            } else if (webFrame.msRequestFullscreen) {
+                webFrame.msRequestFullscreen();
             }
         });
     </script>
